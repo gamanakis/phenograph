@@ -12,13 +12,14 @@ import sys
 from .bruteforce_nn import knnsearch
 
 
-def find_neighbors(data, k=30, metric="minkowski", p=2, method="brute", n_jobs=-1):
+def find_neighbors(data, k=30, metric="minkowski", p=2, method="brute", n_jobs=-1, use_gpu=False):
     """
     Wraps sklearn.neighbors.NearestNeighbors
     Find k nearest neighbors of every point in data and delete self-distances
 
     :param data: n-by-d data matrix
     :param k: number for nearest neighbors search
+    :param use_gpu: a bool, whether use GPU.
     :param metric: string naming distance metric used to define neighbors
     :param p: if metric == "minkowski", p=2 --> euclidean, p=1 --> manhattan; otherwise ignored.
     :param method: 'brute' or 'kdtree'
@@ -27,40 +28,97 @@ def find_neighbors(data, k=30, metric="minkowski", p=2, method="brute", n_jobs=-
     :return d: n-by-k matrix of distances
     :return idx: n-by-k matrix of neighbor indices
     """
-    if metric.lower() == "euclidean":
-        metric = "minkowski"
-        p = 2
-    if metric.lower() == "manhattan":
-        metric = "minkowski"
-        p = 1
-    if metric.lower() == "minkowski":
-        algorithm = "auto"
-    elif metric.lower() == "cosine" or metric.lower() == "correlation":
-        algorithm = "brute"
-    else:
-        algorithm = "auto"
 
-    print(
-        "Finding {} nearest neighbors using {} metric and '{}' algorithm".format(
-            k, metric, algorithm
-        ),
-        flush=True,
-    )
-    if method == "kdtree":
-        nbrs = NearestNeighbors(
-            n_neighbors=k + 1,  # k+1 because results include self
-            n_jobs=n_jobs,  # use multiple cores if possible
-            metric=metric,  # primary metric
-            p=p,  # if metric == "minkowski", 2 --> euclidean, 1 --> manhattan
-            algorithm=algorithm,  # kd_tree is fastest for minkowski metrics
-        ).fit(data)
-        d, idx = nbrs.kneighbors(data)
+    num, dimension = data.shape
+    use_faiss = False
 
-    elif method == "brute":
-        d, idx = knnsearch(data, k + 1, metric)
+    if use_gpu:
+        use_faiss = True
+        try:
+            import faiss
+        except:
+            Warning("We highly reccomend you to install faiss to accelerate knn! Won't use GPU")
+            use_faiss = False
 
-    else:
-        raise ValueError("Invalid argument to `method` parameters: {}".format(method))
+    if use_faiss:
+        if (metric.lower() == "euclidean") or ((metric.lower() == "minkowski") and (p == 2)):
+            res = faiss.StandardGpuResources()
+            index = faiss.IndexFlatL2(dimension) # for data under 1 million and under 50D, brute search is
+                                                 # enough for faiss especially using gpu
+            index = faiss.index_cpu_to_all_gpus(index)
+
+            batch_size = 400000
+            batch_starts = np.arange(0, num, batch_size)
+            for each in batch_starts:
+                index.add(data[each:each+batch_size])
+
+            d_list, i_list = [], []
+            for each in batch_starts:
+                D, I = index.search(data[each:each+batch_size], k)
+                d_list.append(D)
+                i_list.append(I)
+
+            d = np.vstack(d_list)
+            d = np.sqrt(d)
+            idx = np.vstack(i_list)
+
+        elif metric.lower() == "ip":  # inner product
+            res = faiss.StandardGpuResources()
+            index = faiss.IndexFlatIP(dimension)
+            index = faiss.index_cpu_to_all_gpus(index)
+
+            batch_size = 400000
+            batch_starts = np.arange(0, num, batch_size)
+            for each in batch_starts:
+                index.add(data[each:each+batch_size])
+
+            d_list, i_list = [], []
+            for each in batch_starts:
+                D, I = index.search(data[each:each+batch_size], k)
+                d_list.append(D)
+                i_list.append(I)
+
+            d = np.vstack(d_list)
+            idx = np.vstack(i_list)
+        else:
+            use_faiss = False
+
+    if not use_faiss:
+        if metric.lower() == "euclidean":
+            metric = "minkowski"
+            p = 2
+        if metric.lower() == "manhattan":
+            metric = "minkowski"
+            p = 1
+        if metric.lower() == "minkowski":
+            algorithm = "auto"
+        elif metric.lower() == "cosine" or metric.lower() == "correlation":
+            algorithm = "brute"
+        else:
+            algorithm = "auto"
+
+        print(
+            "Finding {} nearest neighbors using {} metric and '{}' algorithm".format(
+                k, metric, algorithm
+            ),
+            flush=True,
+        )
+
+        if method == "kdtree":
+            nbrs = NearestNeighbors(
+                n_neighbors=k + 1,  # k+1 because results include self
+                n_jobs=n_jobs,  # use multiple cores if possible
+                metric=metric,  # primary metric
+                p=p,  # if metric == "minkowski", 2 --> euclidean, 1 --> manhattan
+                algorithm=algorithm,  # kd_tree is fastest for minkowski metrics
+            ).fit(data)
+            d, idx = nbrs.kneighbors(data)
+
+        elif method == "brute":
+            d, idx = knnsearch(data, k + 1, metric)
+
+        else:
+            raise ValueError("Invalid argument to `method` parameters: {}".format(method))
 
     # Remove self-distances if these are in fact included
     if idx[0, 0] == 0:

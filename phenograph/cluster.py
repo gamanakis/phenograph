@@ -104,6 +104,7 @@ def cluster(
     n_iterations: int = -1,
     use_weights: bool = True,
     seed: Optional[int] = None,
+    use_gpu: bool = False,
     **kargs,
 ) -> Tuple[np.array, spmatrix, float]:
     """\
@@ -168,6 +169,8 @@ def cluster(
     kargs
         Additional arguments passed to :func:`~leidenalg.find_partition` and the
         constructor of the `partition_type`.
+    use_gpu
+        Whether to use GPU to calculate distance. Now only support euclidean and inner product metrics.
 
     Returns
     -------
@@ -206,6 +209,10 @@ def cluster(
         kernel = parallel_jaccard_kernel
     kernelargs = {}
 
+    data = data.astype(np.float32)
+    if not data.flags.contiguous:
+        data = np.ascontiguousarray(data) # faiss must use contiguous array and float32!
+
     # Start timer
     tic = time.time()
     # Go!
@@ -222,7 +229,8 @@ def cluster(
         assert idx.shape[0] == data.shape[0]
     else:
         d, idx = find_neighbors(
-            data, k=k, metric=primary_metric, method=nn_method, n_jobs=n_jobs
+            data, k=k, metric=primary_metric, method=nn_method, n_jobs=n_jobs,
+            use_gpu=use_gpu,
         )
         print("Neighbors computed in {} seconds".format(time.time() - tic), flush=True)
 
