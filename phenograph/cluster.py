@@ -21,6 +21,7 @@ from phenograph.core import (
     graph2binary,
     runlouvain,
 )
+import cugraph
 
 
 def chunk_clusters(cl):
@@ -317,6 +318,19 @@ def cluster(
         print(
             "PhenoGraph completed in {} seconds".format(time.time() - tic), flush=True
         )
+
+    elif clustering_algo == "louvain-gpu":
+        tic_ = time.time()
+        # convert resulting graph from scipy.sparse.coo.coo_matrix to Graph object
+        # get indices of vertices
+        edgelist = np.vstack(graph.nonzero()).T
+        g = cugraph.Graph()
+        g.add_edge_list(edgelist[:,0], edgelist[:,1], graph.data)
+        parts, Q = cugraph.louvain(g, n_iterations)
+        print(
+            "Louvain-GPU completed in {} seconds".format(time.time() - tic_), flush=True,
+        )
+        return parts, Q
 
     else:
         # return only graph object
