@@ -22,6 +22,7 @@ from phenograph.core import (
     runlouvain,
 )
 import cugraph
+import pandas as pd
 
 
 def chunk_clusters(cl):
@@ -324,16 +325,22 @@ def cluster(
         # convert resulting graph from scipy.sparse.coo.coo_matrix to Graph object
         # get indices of vertices
         edgelist = np.vstack(graph.nonzero()).T
-        g = cugraph.Graph()
+        g = cugraph.Graph(symmetrized=True)
         g.add_edge_list(edgelist[:,0], edgelist[:,1], graph.data)
         parts, Q = cugraph.louvain(g, n_iterations)
+        communities = parts.as_matrix()[:,1]
         print(
             "Louvain-GPU completed in {} seconds".format(time.time() - tic_), flush=True,
         )
-        return parts, g, Q
+
+        print("Sorting communities by size, please wait ...", flush=True)
+        communities = sort_by_size(communities, min_cluster_size)
+
+        print("PhenoGraph complete in {} seconds".format(time.time() - tic), flush=True)
 
     else:
         # return only graph object
         pass
 
+    print(pd.DataFrame(data = communities)[0].value_counts())
     return communities, graph, Q
