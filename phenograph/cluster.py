@@ -330,7 +330,7 @@ def cluster(
         print(
             "Louvain-GPU completed in {} seconds".format(time.time() - tic_), flush=True,
         )
-        return parts, Q
+        return parts, g, Q
 
     else:
         # return only graph object

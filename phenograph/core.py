@@ -240,8 +240,11 @@ def graph2binary(filename, graph):
     if s.dtype != np.float64:
         s = s.astype("float64")
     # write to file (NB f.writelines is ~10x faster than np.tofile(f))
-    with open(filename + ".bin", "w+b") as f:
-        f.writelines([e for t in zip(ij, s) for e in t])
+    #with open(filename + ".bin", "w+b") as f:
+    #    f.writelines([e for t in zip(ij, s) for e in t])
+    ijs = np.core.records.fromarrays([ij[:,0], ij[:,1], s], names='i, j, s',
+            formats='int32, int32, float64')
+    ijs.tofile(filename + ".bin")
     print("Wrote graph to binary file in {} seconds".format(time.time() - tic))
 
 
