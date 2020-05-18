@@ -88,7 +88,8 @@ def sort_by_size(clusters: np.array, min_size: int = 10, n_jobs: int = -1) -> np
 
 def cluster(
     data: Union[np.ndarray, spmatrix],
-    clustering_algo: Union["louvain", "leiden"] = "louvain",
+    clustering_algo: Union["louvain", "louvain-gpu",
+        "leiden", "leiden-igraph"] = "louvain",
     k: int = 30,
     directed: bool = False,
     prune: bool = False,
@@ -285,7 +286,7 @@ def cluster(
             if re.search(uid, f):
                 os.remove(f)
 
-    elif clustering_algo == "leiden":
+    elif "leiden" in clustering_algo:
         # convert resulting graph from scipy.sparse.coo.coo_matrix to Graph object
         # get indices of vertices
         edgelist = np.vstack(graph.nonzero()).T.tolist()
@@ -300,13 +301,17 @@ def cluster(
         if use_weights:
             kargs["weights"] = np.array(g.es["weights"]).astype("float64")
         kargs["n_iterations"] = n_iterations
-        kargs["seed"] = seed
 
         print("Running Leiden optimization", flush=True)
         tic_ = time.time()
-        communities = leidenalg.find_partition(
-            g, partition_type=partition_type, **kargs,
-        )
+        if clustering_algo == "leiden":
+            communities = leidenalg.find_partition(
+                g, partition_type=partition_type, **kargs, seed=seed,
+            )
+        elif clustering_algo == "leiden-igraph":
+            communities = g.community_leiden(objective_function="modularity",
+                **kargs,
+            )
         Q = communities.q
         print(
             "Leiden completed in {} seconds".format(time.time() - tic_), flush=True,
