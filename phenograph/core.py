@@ -47,39 +47,18 @@ def find_neighbors(data, k=30, metric="minkowski", p=2, method="brute", n_jobs=-
                                                  # enough for faiss especially using gpu
             index = faiss.index_cpu_to_all_gpus(index)
 
-            batch_size = 400000
-            batch_starts = np.arange(0, num, batch_size)
-            for each in batch_starts:
-                index.add(data[each:each+batch_size])
-
-            d_list, i_list = [], []
-            for each in batch_starts:
-                D, I = index.search(data[each:each+batch_size], k)
-                d_list.append(D)
-                i_list.append(I)
-
-            d = np.vstack(d_list)
-            d = np.sqrt(d)
-            idx = np.vstack(i_list)
+            index.add(data)
+            D, idx = index.search(data, k + 1) # results include self, k+1
+            d = np.sqrt(D)
 
         elif metric.lower() == "ip":  # inner product
             res = faiss.StandardGpuResources()
             index = faiss.IndexFlatIP(dimension)
             index = faiss.index_cpu_to_all_gpus(index)
 
-            batch_size = 400000
-            batch_starts = np.arange(0, num, batch_size)
-            for each in batch_starts:
-                index.add(data[each:each+batch_size])
+            index.add(data)
+            d, idx = index.search(data, k + 1)
 
-            d_list, i_list = [], []
-            for each in batch_starts:
-                D, I = index.search(data[each:each+batch_size], k)
-                d_list.append(D)
-                i_list.append(I)
-
-            d = np.vstack(d_list)
-            idx = np.vstack(i_list)
         else:
             use_faiss = False
 
