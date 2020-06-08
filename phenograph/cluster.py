@@ -23,6 +23,7 @@ from phenograph.core import (
 )
 import cugraph
 import pandas as pd
+import pickle
 
 
 def chunk_clusters(cl):
@@ -218,6 +219,7 @@ def cluster(
 
     # Start timer
     tic = time.time()
+    uid = uuid.uuid1().hex
     # Go!
     if isinstance(data, sp.spmatrix) and data.shape[0] == data.shape[1]:
         print(
@@ -235,6 +237,9 @@ def cluster(
             data, k=k, metric=primary_metric, method=nn_method, n_jobs=n_jobs,
             use_gpu=use_gpu,
         )
+        # for debugging or manually running
+        pickle.dump(d, open(uid + ".nneigh.d.pickle","wb"))
+        pickle.dump(idx, open(uid + ".nneigh.idx.pickle","wb"))
         print("Neighbors computed in {} seconds".format(time.time() - tic), flush=True)
 
     subtic = time.time()
@@ -268,12 +273,12 @@ def cluster(
         # retain lower triangle (for efficiency)
         graph = sp.tril(sg, -1)
 
+    # write to file with unique id
+    graph2binary(uid, graph)
+
     # choose between Louvain or Leiden algorithm
     communities, Q = "", ""
     if clustering_algo == "louvain":
-        # write to file with unique id
-        uid = uuid.uuid1().hex
-        graph2binary(uid, graph)
         communities, Q = runlouvain(uid, tol=q_tol, time_limit=louvain_time_limit)
 
         print("Sorting communities by size, please wait ...", flush=True)

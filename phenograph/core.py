@@ -224,6 +224,8 @@ def graph2binary(filename, graph):
     ijs = np.core.records.fromarrays([ij[:,0], ij[:,1], s], names='i, j, s',
             formats='int32, int32, float64')
     ijs.tofile(filename + ".bin")
+    # for debugging, or manually running
+    np.savez(filename + ".ijs.npz", i=i, j=j, s=s)
     print("Wrote graph to binary file in {} seconds".format(time.time() - tic))
 
 
